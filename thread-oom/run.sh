@@ -73,9 +73,8 @@ RunPipelne() {
 RunCancel() {
   JOB_ID=$(gcloud dataflow jobs list --filter="name=$JOB_NAME" --project="$PROJECT_ID" --region=$REGION --status=active --format='value(id)')
   if [ -n "$JOB_ID" ]; then
-    echo "$FILENAME: Cancelling Dataflow job..."
+    echo "$FILENAME: Cancelling Dataflow job... It make time to fully stop."
     gcloud dataflow jobs cancel "$JOB_ID" --region="$REGION" --project="$PROJECT_ID"
-    echo "$FILENAME: It may take time to fully stop."
   else
     echo "$FILENAME: No Dataflow job running with $JOB_NAME."
   fi
@@ -108,7 +107,7 @@ RunCleanup() {
 
   if gsutil ls -b "$TEMP_BUCKET" >/dev/null 2>&1; then
     echo "$FILENAME: Deleting objecst and GCS temp bucket..."
-    gsutil rm -r "$TEMP_BUCKET"
+    gsutil -m -q rm -r "$TEMP_BUCKET"
   fi
 }
 
