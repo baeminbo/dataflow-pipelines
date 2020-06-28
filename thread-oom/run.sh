@@ -49,33 +49,6 @@ RunSetup() {
   fi
 }
 
-RunCleanup() {
-  JOB_ID=$(gcloud dataflow jobs list --filter="name=$JOB_NAME" --project="$PROJECT_ID" --region=$REGION --status=active --format='value(id)')
-  if [ -n "$JOB_ID" ]; then
-    echo "$FILENAME: Cancelling Dataflow job..."
-    gcloud dataflow jobs cancel "$JOB_ID" --region="$REGION" --project="$PROJECT_ID"
-  fi
-  if gcloud pubsub topics describe "$SINK_TOPIC" --project="$PROJECT_ID" >/dev/null 2>&1; then
-    echo "$FILENAME: Deleting Pusbub Sink Topic..."
-    gcloud pubsub topics delete "$SINK_TOPIC" --project="$PROJECT_ID"
-  fi
-
-  if gcloud pubsub subscriptions describe "$SOURCE_SUBSCRIPTION" --project="$PROJECT_ID" >/dev/null 2>&1; then
-    echo "$FILENAME: Deleting Pusbub Source Subscription..."
-    gcloud pubsub subscriptions delete "$SOURCE_SUBSCRIPTION" --project="$PROJECT_ID"
-  fi
-
-  if gcloud pubsub topics describe "$SOURCE_TOPIC" --project=$PROJECT_ID >/dev/null 2>&1; then
-    echo "$FILENAME: Deleting Pubsub Source Topic..."
-    gcloud pubsub topics delete "$SOURCE_TOPIC" --project="$PROJECT_ID"
-  fi
-
-  if gsutil ls -b "$TEMP_BUCKET" >/dev/null 2>&1; then
-    echo "$FILENAME: Deleting objecst and GCS temp bucket..."
-    gsutil rm -r "$TEMP_BUCKET"
-  fi
-}
-
 RunPipelne() {
   TEMP_LOCATION="$TEMP_BUCKET/dataflow/temp"
   STAGING_LOCATION="$TEMP_BUCKET/dataflow/staging"
@@ -97,6 +70,17 @@ RunPipelne() {
     "
 }
 
+RunCancel() {
+  JOB_ID=$(gcloud dataflow jobs list --filter="name=$JOB_NAME" --project="$PROJECT_ID" --region=$REGION --status=active --format='value(id)')
+  if [ -n "$JOB_ID" ]; then
+    echo "$FILENAME: Cancelling Dataflow job..."
+    gcloud dataflow jobs cancel "$JOB_ID" --region="$REGION" --project="$PROJECT_ID"
+    echo "$FILENAME: It may take time to fully stop."
+  else
+    echo "$FILENAME: No Dataflow job running with $JOB_NAME."
+  fi
+}
+
 RunPublish() {
   for k in $(seq 0 1023); do
     message=$(seq 0 8191 | awk '{printf("%02x:%04d ", '"$k"' % 256, $1)}')
@@ -104,10 +88,35 @@ RunPublish() {
   done
 }
 
+RunCleanup() {
+  RunCancel
+
+  if gcloud pubsub topics describe "$SINK_TOPIC" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "$FILENAME: Deleting Pusbub Sink Topic..."
+    gcloud pubsub topics delete "$SINK_TOPIC" --project="$PROJECT_ID"
+  fi
+
+  if gcloud pubsub subscriptions describe "$SOURCE_SUBSCRIPTION" --project="$PROJECT_ID" >/dev/null 2>&1; then
+    echo "$FILENAME: Deleting Pusbub Source Subscription..."
+    gcloud pubsub subscriptions delete "$SOURCE_SUBSCRIPTION" --project="$PROJECT_ID"
+  fi
+
+  if gcloud pubsub topics describe "$SOURCE_TOPIC" --project=$PROJECT_ID >/dev/null 2>&1; then
+    echo "$FILENAME: Deleting Pubsub Source Topic..."
+    gcloud pubsub topics delete "$SOURCE_TOPIC" --project="$PROJECT_ID"
+  fi
+
+  if gsutil ls -b "$TEMP_BUCKET" >/dev/null 2>&1; then
+    echo "$FILENAME: Deleting objecst and GCS temp bucket..."
+    gsutil rm -r "$TEMP_BUCKET"
+  fi
+}
+
 PrintHelp() {
   echo "Usage: $FILENAME (setup|pipeline|publish|cleanup|help)
   setup     Prepare GCS temp bucket and Pubsub Topics/Subscriptions.
   pipeline  Create Dataflow job.
+  cancel    Cancel Dataflow job.
   publish   Publish messages to Pubsub until stopped. Type 'ctrl-c' to stop.
             The job may start to process the messages.
   cleanup   Stop Dataflow job and delete all resources.
@@ -125,6 +134,9 @@ main() {
     ;;
   pipeline)
     RunPipelne
+    ;;
+  cancel)
+    RunCancel
     ;;
   publish)
     RunPublish
