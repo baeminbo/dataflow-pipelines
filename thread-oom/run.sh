@@ -104,6 +104,16 @@ RunPublish() {
   done
 }
 
+PrintHelp() {
+  echo "Usage: $FILENAME (setup|pipeline|publish|cleanup|help)
+  setup     Prepare GCS temp bucket and Pubsub Topics/Subscriptions.
+  pipeline  Create Dataflow job.
+  publish   Publish messages to Pubsub until stopped. Type 'ctrl-c' to stop.
+            The job may start to process the messages.
+  cleanup   Stop Dataflow job and delete all resources.
+  help      Print this help message."
+}
+
 main() {
   COMMAND=$1
   case "$COMMAND" in
@@ -119,12 +129,17 @@ main() {
   publish)
     RunPublish
     ;;
+  help)
+    PrintHelp
+    ;;
   "")
     echo 1>&2 "Error. Please specify command."
+    PrintHelp
     exit 1
     ;;
   *)
     echo 1>&2 "Error. Unexpected command: '$COMMAND'"
+    PrintHelp
     exit 1
     ;;
   esac

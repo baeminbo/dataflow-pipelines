@@ -30,21 +30,21 @@ public class ThreadOOMPipeline {
 
   private static final Logger log = LoggerFactory.getLogger(ThreadOOMPipeline.class);
 
-  private static long RANDOM_SLEEP = Duration.standardMinutes(5).getMillis();
+  private static long RANDOM_SLEEP = Duration.standardMinutes(3).getMillis();
 
   public interface Options extends PipelineOptions {
 
-    @Description("Pub/Sub subscription. e.g. projects/<PROJECT_ID>/subscriptions/<SUBSCRIPTION>")
+    @Description("Pub/Sub subscription to pull input from. e.g. projects/<PROJECT_ID>/subscriptions/<SUBSCRIPTION>")
     @Required
-    ValueProvider<String> getSubscription();
+    ValueProvider<String> getSourceSubscription();
 
-    void setSubscription(ValueProvider<String> subscription);
+    void setSourceSubscription(ValueProvider<String> sourceSubscription);
 
-    @Description("Pub/sub topic. e.g. projects/<PROJECT_ID>/topics/<TOPIC>")
+    @Description("Pub/sub topic to publish output into. e.g. projects/<PROJECT_ID>/topics/<TOPIC>")
     @Required
-    ValueProvider<String> getTopic();
+    ValueProvider<String> getSinkTopic();
 
-    void setTopic(ValueProvider<String> topic);
+    void setSinkTopic(ValueProvider<String> sinkTopic);
   }
 
   private static List<String> processInParallel(Iterable<String> input) {
@@ -88,7 +88,7 @@ public class ThreadOOMPipeline {
     Pipeline pipeline = Pipeline.create(options);
 
     pipeline
-        .apply(PubsubIO.readStrings().fromSubscription(options.getSubscription()))
+        .apply(PubsubIO.readStrings().fromSubscription(options.getSourceSubscription()))
         .apply("Split", ParDo.of(new DoFn<String, KV<String, String>>() {
           @ProcessElement
           public void processElement(ProcessContext context) {
@@ -115,7 +115,7 @@ public class ThreadOOMPipeline {
             }
           }
         }))
-        .apply(PubsubIO.writeStrings().to(options.getTopic()));
+        .apply(PubsubIO.writeStrings().to(options.getSinkTopic()));
 
     pipeline.run();
   }
