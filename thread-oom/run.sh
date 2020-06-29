@@ -1,4 +1,6 @@
 #!/bin/bash
+trap "exit" INT
+
 FILENAME=$(basename $0)
 BYOP=byop11
 
