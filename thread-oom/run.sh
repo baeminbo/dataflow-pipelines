@@ -2,7 +2,7 @@
 trap "exit" INT
 
 FILENAME=$(basename $0)
-BYOP=byop11
+BYOP=byop10
 
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project)}"
 TEMP_BUCKET="${TEMP_BUCKET:-gs://$PROJECT_ID-$BYOP}"
