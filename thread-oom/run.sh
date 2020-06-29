@@ -60,6 +60,7 @@ RunPipelne() {
     -Pdataflow-runner \
     -Dexec.mainClass=baeminbo.ThreadOOMPipeline \
     -Dexec.args="--runner=DataflowRunner \
+    --project=$PROJECT_ID \
     --region=$REGION \
     --jobName=$JOB_NAME \
     --workerMachineType=$WORKER_MACHINE_TYPE \
