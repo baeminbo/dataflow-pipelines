@@ -51,7 +51,7 @@ RunSetup() {
   fi
 }
 
-RunPipelne() {
+RunPipeline() {
   TEMP_LOCATION="$TEMP_BUCKET/dataflow/temp"
   STAGING_LOCATION="$TEMP_BUCKET/dataflow/staging"
 
@@ -73,11 +73,32 @@ RunPipelne() {
     "
 }
 
-RunCancel() {
+GetRunningJobId() {
   JOB_ID=$(gcloud dataflow jobs list --filter="name=$JOB_NAME" --project="$PROJECT_ID" --region=$REGION --status=active --format='value(id)')
+  echo "$JOB_ID"
+}
+
+RunCancel() {
+  JOB_ID=$(GetRunningJobId)
   if [ -n "$JOB_ID" ]; then
-    echo "$FILENAME: Cancelling Dataflow job... It make time to fully stop."
+    echo "$FILENAME: Cancelling Dataflow job..."
     gcloud dataflow jobs cancel "$JOB_ID" --region="$REGION" --project="$PROJECT_ID"
+
+    for i in $(seq 0 16); do
+      if [ -n "$(GetRunningJobId)" ]; then
+        SLEEP_TIME=$(bc <<<"x=2 ^ $i")
+        if (($(bc <<<"$SLEEP_TIME > 10.0"))); then
+          SLEEP_TIME="10.0"
+        fi
+        echo "$FILENAME: Waiting for job completion. Will sleep $SLEEP_TIME second(s)"
+        sleep "$SLEEP_TIME"
+      else
+        echo "$FILENAME: Job was cancelled."
+        return 0
+      fi
+    done
+    echo "$FILENAME: Failed to wait for job cancellation due to timeout."
+    return 1
   else
     echo "$FILENAME: No Dataflow job running with $JOB_NAME."
   fi
@@ -109,7 +130,7 @@ RunCleanup() {
   fi
 
   if gsutil ls -b "$TEMP_BUCKET" >/dev/null 2>&1; then
-    echo "$FILENAME: Deleting objecst and GCS temp bucket..."
+    echo "$FILENAME: Deleting objects and GCS temp bucket..."
     gsutil -m -q rm -r "$TEMP_BUCKET"
   fi
 }
@@ -135,7 +156,7 @@ main() {
     RunCleanup
     ;;
   pipeline)
-    RunPipelne
+    RunPipeline
     ;;
   cancel)
     RunCancel
