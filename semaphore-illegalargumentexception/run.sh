@@ -1,29 +1,32 @@
 #!/bin/bash
-trap 'exit' INT
 
 FILENAME=$(basename $0)
 BYOP="byop11"
 
+LDAP="$USER"
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project)}"
-TEMP_BUCKET="${TEMP_BUCKET:-gs://$PROJECT_ID-$BYOP}"
-SOURCE_SUBSCRIPTION="${SOURCE_SUBSCRIPTION:-$BYOP-source-subscription}"
-JOB_NAME="${USER}-${BYOP}-semaphore"
-WORKER_MACHINE_TYPE="${WORKER_MACHINE:-'n1-highmem-8'}"
+
+GCS_BUCKET="${GCS_BUCKET:-gs://$PROJECT_ID-$BYOP}"
+WORKER_MACHINE_TYPE="${WORKER_MACHINE:-n1-highmem-8}"
+SUBSCRIPTION_JOB_ID="${SUBSCRIPTION_JOB_ID:-$BYOP-subscription}"
+JOB_NAME="${LDAP}-${BYOP}"
 REGION="us-central1"
+ENABLE_STREAMING_ENGINE="${ENABLE_STREAMING_ENGINE:-false}"
+BEAM_VERSION="${BEAM_VERSION}" # Referred in pom.xml
 
 RunSetup() {
-  if ! gsutil ls -b "$TEMP_BUCKET" >/dev/null 2>&1; then
+  if ! gsutil ls -b "$GCS_BUCKET" >/dev/null 2>&1; then
     echo "$FILENAME: Creating GCS temp bucket..."
-    gsutil mb "$TEMP_BUCKET"
+    gsutil mb "$GCS_BUCKET"
     if [ $? -ne 0 ]; then
       echo "$FILENAME: Fatal. Failed to create bucket."
       exit 1
     fi
   fi
 
-  if ! gcloud pubsub subscriptions describe "$SOURCE_SUBSCRIPTION" --project="$PROJECT_ID" >/dev/null 2>&1; then
+  if ! gcloud pubsub subscriptions describe "$SUBSCRIPTION_JOB_ID" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "$FILENAME: Creating Pubsub Source Subscription..."
-    gcloud pubsub subscriptions create "$SOURCE_SUBSCRIPTION" --topic=projects/pubsub-public-data/topics/taxirides-realtime --project="$PROJECT_ID"
+    gcloud pubsub subscriptions create "$SUBSCRIPTION_JOB_ID" --topic=projects/pubsub-public-data/topics/taxirides-realtime --project="$PROJECT_ID"
     if [ $? -ne 0 ]; then
       echo "$FILENAME: Fatal. Failed to create source subscription."
       exit 1
@@ -32,11 +35,10 @@ RunSetup() {
 }
 
 RunPipeline() {
-  TEMP_LOCATION="$TEMP_BUCKET/dataflow/temp"
-  STAGING_LOCATION="$TEMP_BUCKET/dataflow/staging"
+  TEMP_LOCATION="$GCS_BUCKET/dataflow/temp"
+  STAGING_LOCATION="$GCS_BUCKET/dataflow/staging"
 
-  SOURCE_SUBSCRIPTION_PATH="projects/$PROJECT_ID/subscriptions/$SOURCE_SUBSCRIPTION"
-  SINK_TOPIC_PATH="projects/$PROJECT_ID/topics/$SINK_TOPIC"
+  SUBSCRIPTION_NAME="projects/$PROJECT_ID/subscriptions/$SUBSCRIPTION_JOB_ID"
 
   mvn compile exec:java \
     -Pdataflow-runner \
@@ -48,29 +50,27 @@ RunPipeline() {
     --workerMachineType=$WORKER_MACHINE_TYPE \
     --tempLocation=$TEMP_LOCATION \
     --stagingLocation=$STAGING_LOCATION \
-    --subscription=$SOURCE_SUBSCRIPTION_PATH \
+    --subscription=$SUBSCRIPTION_NAME \
+    --enableStreamingEngine=$ENABLE_STREAMING_ENGINE \
     "
 }
 
-GetRunningJobId() {
-  JOB_ID=$(gcloud dataflow jobs list --filter="name=$JOB_NAME" --project="$PROJECT_ID" --region=$REGION --status=active --format='value(id)')
-  echo "$JOB_ID"
-}
-
 RunCancel() {
+  GetRunningJobId() { # echo empty string if not running
+    JOB_ID=$(gcloud dataflow jobs list --filter="name=$JOB_NAME" --project="$PROJECT_ID" --region=$REGION --status=active --format='value(id)')
+    echo "$JOB_ID"
+  }
+
   JOB_ID=$(GetRunningJobId)
   if [ -n "$JOB_ID" ]; then
     echo "$FILENAME: Cancelling Dataflow job..."
     gcloud dataflow jobs cancel "$JOB_ID" --region="$REGION" --project="$PROJECT_ID"
 
-    for i in $(seq 0 16); do
+    for _ in $(seq 0 16); do
       if [ -n "$(GetRunningJobId)" ]; then
-        SLEEP_TIME=$(bc <<<"x=2 ^ $i")
-        if (($(bc <<<"$SLEEP_TIME > 10.0"))); then
-          SLEEP_TIME="10.0"
-        fi
-        echo "$FILENAME: Waiting for job completion. Will sleep $SLEEP_TIME second(s)"
-        sleep "$SLEEP_TIME"
+        sleep_time="10.0"
+        echo "$FILENAME: Waiting for job completion. Will sleep $sleep_time second(s)"
+        sleep "$sleep_time"
       else
         echo "$FILENAME: Job was cancelled."
         return 0
@@ -86,15 +86,64 @@ RunCancel() {
 RunCleanup() {
   RunCancel
 
-  if gcloud pubsub subscriptions describe "$SOURCE_SUBSCRIPTION" --project="$PROJECT_ID" >/dev/null 2>&1; then
+  if gcloud pubsub subscriptions describe "$SUBSCRIPTION_JOB_ID" --project="$PROJECT_ID" >/dev/null 2>&1; then
     echo "$FILENAME: Deleting Pusbub Source Subscription..."
-    gcloud pubsub subscriptions delete "$SOURCE_SUBSCRIPTION" --project="$PROJECT_ID"
+    gcloud pubsub subscriptions delete "$SUBSCRIPTION_JOB_ID" --project="$PROJECT_ID"
   fi
 
-  if gsutil ls -b "$TEMP_BUCKET" >/dev/null 2>&1; then
+  if gsutil ls -b "$GCS_BUCKET" >/dev/null 2>&1; then
     echo "$FILENAME: Deleting objects and GCS temp bucket..."
-    gsutil -m -q rm -r "$TEMP_BUCKET"
+    gsutil -m -q rm -r "$GCS_BUCKET"
   fi
+}
+
+# Used to upload templates. Hide from users.
+_UploadTemplates() {
+  staging_location="gs://dataflow-mastery/staging"
+
+  template_location="gs://dataflow-mastery/templates/byop-11"
+  echo "$FILENAME: Upload default template (2.19.0 without Streaming Engine) to $template_location"
+  mvn clean compile exec:java \
+    -Pdataflow-runner \
+    -Dexec.mainClass=baeminbo.SemaphoreIllegalArgumentExceptionPipeline \
+    -Dexec.args="--runner=DataflowRunner \
+    --project=$PROJECT_ID \
+    --region=$REGION \
+    --workerMachineType=$WORKER_MACHINE_TYPE \
+    --stagingLocation=$staging_location \
+    --templateLocation=$template_location \
+    "
+
+  template_location="gs://dataflow-mastery/templates/byop-11-beam_2.22.0"
+  echo "$FILENAME: Upload 2.22.0 template (2.22.0 without Streaming Engine) to $template_location"
+  BEAM_VERSION=2.22.0 mvn clean compile exec:java \
+    -Pdataflow-runner \
+    -Dexec.mainClass=baeminbo.SemaphoreIllegalArgumentExceptionPipeline \
+    -Dexec.args="--runner=DataflowRunner \
+    --project=$PROJECT_ID \
+    --region=$REGION \
+    --workerMachineType=$WORKER_MACHINE_TYPE \
+    --stagingLocation=$staging_location \
+    --templateLocation=$template_location \
+    "
+
+  template_location="gs://dataflow-mastery/templates/byop-11-streaming_engine"
+  echo "$FILENAME: Upload Streaming Engine template (2.19.0 with Streaming Engine) to $template_location"
+  mvn clean compile exec:java \
+    -Pdataflow-runner \
+    -Dexec.mainClass=baeminbo.SemaphoreIllegalArgumentExceptionPipeline \
+    -Dexec.args="--runner=DataflowRunner \
+    --project=$PROJECT_ID \
+    --region=$REGION \
+    --workerMachineType=$WORKER_MACHINE_TYPE \
+    --stagingLocation=$staging_location \
+    --templateLocation=$template_location \
+    --enableStreamingEngine \
+    "
+
+  template_runner=$(dirname "$0")/template_runner.sh
+  echo "$FILENAME: Upload template runner to gs://dataflow-mastery/data/byop-11/template_runner.sh"
+  gsutil cp "$template_runner" gs://dataflow-mastery/data/byop-11/template_runner.sh
 }
 
 PrintHelp() {
@@ -120,6 +169,9 @@ main() {
     ;;
   cancel)
     RunCancel
+    ;;
+  _upload_templates)
+    _UploadTemplates
     ;;
   help)
     PrintHelp
