@@ -1,0 +1,41 @@
+{
+  "description": "BYOP exercise for writing into a large number of GCS destinations",
+  "Name": "Dynamic GCS Write",
+  "parameters": [
+    {
+      "name": "inputElementCount",
+      "label": "The number of total input elements",
+      "helpText": "Default is 1000000000",
+      "isOptional": true,
+      "regexes": [
+        "[1-9][0-9]*"
+      ]
+    },
+    {
+      "name": "shardCount",
+      "label": "The number of GCS write shards",
+      "helpText": "Default is 100",
+      "isOptional": true,
+      "regexes": [
+        "[1-9][0-9]*"
+      ]
+    },
+    {
+      "name": "destinationCount",
+      "label": "The number of GCS write destinations",
+      "helpText": "Default is 10000",
+      "isOptional": true,
+      "regexes": [
+        "[1-9][0-9]*"
+      ]
+    },
+    {
+      "name": "outputLocation",
+      "label": "The output directory",
+      "helpText": "e.g. gs://byop-exercise-example/output",
+      "regexes": [
+        "gs://.+"
+      ]
+    }
+  ]
+}
