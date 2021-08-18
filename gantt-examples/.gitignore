@@ -1,0 +1,6 @@
+#  virtualenv directory
+python/env
+
+# Intellij
+.idea
+*.iml

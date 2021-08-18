@@ -1,0 +1,3 @@
+# requirements.txt to create dataflow job. You don't need to set this file as
+# --requirements_file.
+apache-beam[gcp]==2.31.0
