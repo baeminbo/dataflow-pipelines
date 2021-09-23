@@ -1,0 +1,14 @@
+# IntelliJ
+.idea
+*.iml
+
+# Virtualenv
+env
+
+# Python build
+dist
+*.egg-info
+
+# PyPI download directory. 
+# See run_dataflow_runner_with_extra_package in run.sh
+downloads
