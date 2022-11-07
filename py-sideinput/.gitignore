@@ -1,0 +1,7 @@
+# virtualenv
+env/
+
+
+# Intellij
+.idea/
+*.iml
