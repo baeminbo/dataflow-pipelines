@@ -1,0 +1,11 @@
+# Intellij
+*.iml
+
+# Virtual environment
+env/
+
+# Build
+build/
+dist/
+*.egg-info/
+__pycache__
