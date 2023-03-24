@@ -1,0 +1,12 @@
+# Intellij
+.idea/
+*.iml
+
+# Maven output
+target
+
+# Python virtual env
+env/
+
+# Python build
+__pycache__
