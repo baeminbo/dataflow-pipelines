@@ -1,0 +1,7 @@
+# IDE
+*.iml
+.idea/
+
+# Python virtual environment
+env/
+
