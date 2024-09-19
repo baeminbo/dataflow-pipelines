@@ -1,0 +1,12 @@
+# Python code is under development
+python
+
+# Intellij
+.idea
+.iml
+
+# Log files
+*.out
+
+# Maven
+target
