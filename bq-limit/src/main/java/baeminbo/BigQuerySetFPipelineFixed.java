@@ -1,8 +1,7 @@
 package baeminbo;
 
-import com.google.api.services.bigquery.model.TableCell;
 import com.google.api.services.bigquery.model.TableRow;
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryStorageApiInsertError;
@@ -16,6 +15,8 @@ import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.SimpleFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.TreeMap;
 
 public class BigQuerySetFPipelineFixed {
   private static final Logger LOG = LoggerFactory.getLogger(BigQuerySetFPipelineFixed.class);
@@ -37,15 +38,20 @@ public class BigQuerySetFPipelineFixed {
       .apply(MapElements.via(new SimpleFunction<Integer, TableRow>() {
         @Override
         public TableRow apply(Integer bytesSize) {
+          ImmutableMap<String, Object> data = ImmutableMap.of(
+            "bytes", new byte[bytesSize],
+            // requires STRUCT to be a TableRow or AbstractMap
+            // See org.apache.beam.sdk.io.gcp.bigquery.TableRowToStorageApiProto.singularFieldToProtoValue
+            "sub", new TreeMap<>(ImmutableMap.of("a", "hello", "c", 3, "f", 1.2f)));
+
           TableRow row = new TableRow();
-          row.setF(ImmutableList.of(
-            new TableCell().setV(bytesSize),
-            new TableCell().setV(new byte[bytesSize])));
+          row.putAll(data);
+
           return row;
         }
       }))
       .apply(BigQueryIO.writeTableRows()
-        .to("<REDACTED>")
+        .to("baeminbo-2021.dataset1.table1")
         .optimizedWrites()
         .withMethod(BigQueryIO.Write.Method.STORAGE_API_AT_LEAST_ONCE)
         .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_NEVER)
