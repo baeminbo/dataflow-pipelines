@@ -12,6 +12,8 @@ import org.apache.beam.sdk.transforms.Reshuffle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.security.Security;
+
 public class TlsPipeline {
   private static final Logger LOG = LoggerFactory.getLogger(TlsPipeline.class);
 
@@ -39,6 +41,9 @@ public class TlsPipeline {
     @Override
     public void onStartup() {
       System.setProperty("javax.net.debug", "ssl:handshake");
+//      Disabled GCM may cause handshake failure with
+      Security.setProperty("jdk.tls.disabledAlgorithms", "GCM");
+      System.out.println("Disabled algorithms: " + Security.getProperty("jdk.tls.disabledAlgorithms"));
     }
   }
 }
